@@ -149,6 +149,7 @@ public class GameState {
         mulliganWaiting = false;
 
         mana = 0;
+        turnCount = 0;
 
         savedCurrentMana = 0;
         waitingForDraws = 0;

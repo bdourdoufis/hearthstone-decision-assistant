@@ -1,0 +1,9 @@
+<component name="ArtifactManager">
+  <artifact type="jar" name="HearthstoneDecisionAssistant:jar">
+    <output-path>$PROJECT_DIR$/out/artifacts/HearthstoneDecisionAssistant_jar</output-path>
+    <root id="archive" name="HearthstoneDecisionAssistant.jar">
+      <element id="module-output" name="HearthstoneDecisionAssistant" />
+      <element id="extracted-dir" path="$MAVEN_REPOSITORY$/org/json/json/20180130/json-20180130.jar" path-in-jar="/" />
+    </root>
+  </artifact>
+</component>

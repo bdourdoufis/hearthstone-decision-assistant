@@ -2,13 +2,10 @@ package com.hsda;
 
 import com.hsda.analyzer.GameStateAnalyzer;
 import com.hsda.models.GameState;
-import com.hsda.service.CardFetcherService;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.Scanner;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import static java.lang.Thread.sleep;
 
