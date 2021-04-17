@@ -25,6 +25,9 @@ public class GameState {
     private List<Card> opponentBoard;
 
     private int mana;
+    private int savedCurrentMana;
+
+    private int turnCount;
 
     private int opponentHandSize;
 
@@ -35,9 +38,15 @@ public class GameState {
     private boolean mulliganWaiting;
     private int mulliganMarkerCount;
 
+    private int waitingForDraws;
+
+    private boolean bowEquipped;
+
     private GameStateAnalyzer analyzer;
 
-    public GameState() {
+    private boolean wolpertingerBattlecry;
+
+    public GameState() throws IOException, InterruptedException {
         cardIdMap = new HashMap<>();
         service = new CardFetcherService();
 
@@ -56,6 +65,19 @@ public class GameState {
         mulliganWaiting = false;
 
         mana = 0;
+        savedCurrentMana = 0;
+
+        turnCount = 0;
+
+        waitingForDraws = 0;
+
+        bowEquipped = false;
+
+        wolpertingerBattlecry = false;
+
+        for (Card c : service.getDeckCards()) {
+            cardIdMap.put(c.getCardId(), c);
+        }
     }
 
     // GETTER METHODS USED BY THE ANALYZER
@@ -76,8 +98,8 @@ public class GameState {
         return opponentBoard;
     }
 
-    public int getMana() {
-        return mana;
+    public boolean isBowEquipped() {
+        return bowEquipped;
     }
 
     // METHODS FOR SETUP AND COMMUNICATION WITH THE ANALYZER
@@ -127,6 +149,16 @@ public class GameState {
         mulliganWaiting = false;
 
         mana = 0;
+
+        savedCurrentMana = 0;
+        waitingForDraws = 0;
+        bowEquipped = false;
+        wolpertingerBattlecry = false;
+    }
+
+    public void notifyAfterNDraws(int drawCount, int currentMana) {
+        savedCurrentMana = currentMana;
+        waitingForDraws = drawCount;
     }
 
     // METHODS FOR MANAGING USER'S GAMESTATE
@@ -159,17 +191,22 @@ public class GameState {
 
         if (inMulligan) {
             //Do nothing
+        } else if (waitingForDraws > 0) {
+            waitingForDraws--;
+            if (waitingForDraws == 0) {
+                analyzer.notifyStart(savedCurrentMana, true);
+            }
         } else {
             if (!playersTurn) {
                 playersTurn = true;
                 if (mana < 10) {
                     mana++;
-                    System.out.println("Mana increased to " + mana);
                 }
-                analyzer.notifyTurnBegins();
             }
+            turnCount++;
+            System.out.println("\n--- BEGIN TURN " + turnCount + " ---");
+            analyzer.notifyStart(mana, false);
         }
-        System.out.println("Friendly Hand: " + friendlyHand.toString());
     }
 
     public void addCardToFriendlyBoard(String logLine) throws IOException, InterruptedException {
@@ -185,19 +222,36 @@ public class GameState {
         if (cardIdMap.containsKey(cardId)) {
             Card playedCard = cardIdMap.get(cardId);
             if (friendlyHand.contains(playedCard)) {
-                friendlyHand.remove(playedCard);
+                if (playedCard.getName().equalsIgnoreCase("wolpertinger")
+                    && !wolpertingerBattlecry) {
+                    wolpertingerBattlecry = true;
+                    friendlyHand.remove(playedCard);
+                } else if (playedCard.getName().equalsIgnoreCase("wolpertinger")
+                        && wolpertingerBattlecry) {
+                    wolpertingerBattlecry = false;
+                } else {
+                    friendlyHand.remove(playedCard);
+                }
             }
-            //TODO: ADD SPECIAL CASE FOR EAGLEHORN BOW
-            friendlyBoard.add(cardIdMap.get(cardId));
+
+            if (playedCard.getName().equalsIgnoreCase("Eaglehorn Bow")) {
+                bowEquipped = true;
+            } else {
+                friendlyBoard.add(playedCard);
+            }
         } else {
             Card fetchedCard = service.getCardInfo(cardId);
             cardIdMap.put(cardId, fetchedCard);
             if (friendlyHand.contains(fetchedCard)) {
                 friendlyHand.remove(fetchedCard);
             }
-            friendlyBoard.add(fetchedCard);
+
+            if (fetchedCard.getName().equalsIgnoreCase("Eaglehorn Bow")) {
+                bowEquipped = true;
+            } else {
+                friendlyBoard.add(fetchedCard);
+            }
         }
-        System.out.println("Friendly Board: " + friendlyBoard.toString());
     }
 
     public void addFriendlySecret(String logLine) throws IOException, InterruptedException {
@@ -224,7 +278,6 @@ public class GameState {
             }
             friendlySecrets.add(fetchedCard);
         }
-        System.out.println("Friendly Secrets: " + friendlySecrets.toString());
     }
 
     public void cardToFriendlyGraveyard(String logLine) throws IOException, InterruptedException {
@@ -241,7 +294,11 @@ public class GameState {
             Card playedCard = cardIdMap.get(cardId);
             if (playedCard.getType().equalsIgnoreCase("minion")) {
                 friendlyBoard.remove(playedCard);
-            } else {
+            } else if (playedCard.getName().equalsIgnoreCase("Freezing Trap")) {
+                friendlySecrets.remove(playedCard);
+            } else if (playedCard.getName().equalsIgnoreCase("Eaglehorn Bow")) {
+                bowEquipped = false;
+            } else if (!playedCard.getName().equalsIgnoreCase("Master's Call")) {
                 friendlyHand.remove(playedCard);
             }
         } else {
@@ -249,11 +306,14 @@ public class GameState {
             cardIdMap.put(cardId, fetchedCard);
             if (fetchedCard.getType().equalsIgnoreCase("minion")) {
                 friendlyBoard.remove(fetchedCard);
-            } else {
+            } else if (fetchedCard.getName().equalsIgnoreCase("Freezing Trap")) {
+                friendlySecrets.remove(fetchedCard);
+            } else if (fetchedCard.getName().equalsIgnoreCase("Eaglehorn Bow")) {
+                bowEquipped = false;
+            } else if (!fetchedCard.getName().equalsIgnoreCase("Master's Call")) {
                 friendlyHand.remove(fetchedCard);
             }
         }
-        System.out.println("Friendly Board: " + friendlyBoard.toString());
     }
 
     public void mulliganCard(String logLine) throws IOException, InterruptedException {
@@ -274,6 +334,26 @@ public class GameState {
         friendlyHand.remove(toRemove);
     }
 
+    public void burnedCard() {
+        if (inMulligan) {
+            //Do nothing
+        } else if (waitingForDraws > 0) {
+            waitingForDraws--;
+            if (waitingForDraws == 0) {
+                analyzer.notifyStart(savedCurrentMana, true);
+            }
+        } else {
+            if (!playersTurn) {
+                playersTurn = true;
+                if (mana < 10) {
+                    mana++;
+                    System.out.println("Mana increased to " + mana);
+                }
+            }
+            analyzer.notifyStart(mana, false);
+        }
+    }
+
     // METHODS FOR MANAGING OPPONENT'S GAMESTATE
 
     public void addCardToOpposingHand() {
@@ -282,8 +362,6 @@ public class GameState {
         if (playersTurn) {
             playersTurn = false;
         }
-
-        System.out.println("Opponent's Hand Size: " + opponentHandSize);
     }
 
     public void addCardToOpposingBoard(String logLine) throws IOException, InterruptedException {
@@ -298,14 +376,17 @@ public class GameState {
 
         if (cardIdMap.containsKey(cardId)) {
             opponentHandSize--;
-            opponentBoard.add(cardIdMap.get(cardId));
+            if (cardIdMap.get(cardId).getType().equalsIgnoreCase("minion")) {
+                opponentBoard.add(cardIdMap.get(cardId));
+            }
         } else {
             Card fetchedCard = service.getCardInfo(cardId);
             cardIdMap.put(cardId, fetchedCard);
             opponentHandSize--;
-            opponentBoard.add(fetchedCard);
+            if (fetchedCard.getType().equalsIgnoreCase("minion")) {
+                opponentBoard.add(fetchedCard);
+            }
         }
-        System.out.println("Opponent's Board: " + opponentBoard.toString());
     }
 
     public void cardToOpposingGraveyard(String logLine) throws IOException, InterruptedException {
@@ -338,5 +419,18 @@ public class GameState {
 
     public void damageOpponent(int damage) {
         opponentLifeTotal -= damage;
+    }
+
+    public void opponentMinionBounced(String logLine) {
+        Matcher matcher = cardNameRegex.matcher(logLine);
+        String cardName;
+        if (matcher.find()) {
+            cardName = matcher.group(0).substring(0,matcher.group(0).length() - 1);
+        } else {
+            System.out.println("Error occurred during bounce.");
+            return;
+        }
+        Card bounced = Card.getCardFromListByName(cardName, opponentBoard);
+        opponentBoard.remove(bounced);
     }
 }

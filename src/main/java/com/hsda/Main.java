@@ -40,6 +40,10 @@ public class Main {
                     state.beginMulligan();
                 } else if (state.isInMulligan() && nextLine.contains("tag=NUM_CARDS_DRAWN_THIS_TURN value=1")) {
                     state.beginGame();
+                } else if (nextLine.contains("from FRIENDLY DECK -> FRIENDLY GRAVEYARD")) {
+                    state.burnedCard();
+                } else if (nextLine.contains("from OPPOSING PLAY -> OPPOSING HAND")) {
+                    state.opponentMinionBounced(nextLine);
                 } else if (nextLine.contains("TRANSITIONING card")) {
                     if (nextLine.contains("to FRIENDLY HAND")) {
                         state.addCardToHand(nextLine);
